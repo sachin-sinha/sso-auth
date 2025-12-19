@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation';
 import { XMLParser } from 'fast-xml-parser';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -21,13 +22,15 @@ import { setCookie } from '@/lib/actions/cookie.actions';
  * Here, we verify SAML response assertion > authenticate user > redirect to the app
  */
 export async function POST(request: NextRequest) {
+  // TODO: redirect uri
+  let redirectURL = RedirectURLMap.bvector;
   try {
     // 1. read the form data from the POST request
     const formData = await request.formData();
 
     // 2. extract SAMLResponse first (needed for both flows)
     const samlResponse = formData.get('SAMLResponse') as string;
-    if (!samlResponse) return api.ErrorRes(400, 'SAML response not found');
+    if (!samlResponse) return handleSAMLError(400, 'SAML response not found', redirectURL);
 
     // 3. determine orgId - either from RelayState or email domain
     let orgId: string | null = null;
@@ -43,6 +46,7 @@ export async function POST(request: NextRequest) {
       try {
         const decoded = JSON.parse(Buffer.from(relayState, 'base64').toString());
         orgId = decoded.orgId;
+        redirectURL = decoded.redirectURL;
 
         if (!orgId) throw new Error('orgId is missing in relayState');
 
@@ -52,7 +56,11 @@ export async function POST(request: NextRequest) {
 
         if (accountInfo?.organization) org = accountInfo.organization;
       } catch (e) {
-        return api.ErrorRes(400, `Invalid relayState: ${e instanceof Error ? e.message : 'unknown error'}`);
+        return handleSAMLError(
+          400,
+          `Invalid relayState: ${e instanceof Error ? e.message : 'unknown error'}`,
+          redirectURL
+        );
       }
     } else {
       // IdP-Initiated: Need to extract email from SAML response
@@ -72,9 +80,10 @@ export async function POST(request: NextRequest) {
           parsed['saml2p:Response']?.['saml2:Assertion']?.['saml2:Subject']?.['saml2:NameID']?.['#text'];
 
         if (!nameID || !nameID.includes('@')) {
-          return api.ErrorRes(
+          return handleSAMLError(
             400,
-            'Cannot determine organization: no RelayState and invalid email in SAML response'
+            'Cannot determine organization: no RelayState and invalid email in SAML response',
+            redirectURL
           );
         }
 
@@ -86,25 +95,27 @@ export async function POST(request: NextRequest) {
         if (accountInfo?.organization) org = accountInfo.organization;
 
         if (!org?.id) {
-          return api.ErrorRes(400, `No organization found for domain: ${emailDomain}`);
+          return handleSAMLError(400, `No organization found for domain: ${emailDomain}`, redirectURL);
         }
 
         orgId = org.id;
       } catch (e) {
-        return api.ErrorRes(
+        return handleSAMLError(
           500,
-          `Failed to parse IdP-initiated request: ${e instanceof Error ? e.message : 'unknown error'}`
+          `Failed to parse IdP-initiated request: ${e instanceof Error ? e.message : 'unknown error'}`,
+          redirectURL
         );
       }
     }
 
-    if (orgError || !org?.id) return api.ErrorRes(500, orgError || 'Failed to fetch organization');
+    if (orgError || !org?.id)
+      return handleSAMLError(500, orgError || 'Failed to fetch organization', redirectURL);
 
     if (!org?.samlConfig || !org.samlConfig?.metadata?.attributes) {
-      return api.ErrorRes(400, 'SAML SSO not configured for this organization');
+      return handleSAMLError(400, 'SAML SSO not configured for this organization', redirectURL);
     }
 
-    if (!org.ssoEnabled) return api.ErrorRes(400, 'SSO not enabled for this organization');
+    if (!org.ssoEnabled) return handleSAMLError(400, 'SSO not enabled for this organization', redirectURL);
 
     console.debug('🚀 ~ POST ~ samlConfig:', org.samlConfig);
 
@@ -147,23 +158,37 @@ export async function POST(request: NextRequest) {
     await setCookie('bdb_apikey', userApikey, cookieTTL);
 
     // 10. Redirect the user to the app
-    const redirectPath = `/`;
-    return NextResponse.redirect(new URL(redirectPath, process.env.NEXT_PUBLIC_APP_URL));
+    // TODO: set secure cookie to bangdb.com, for 1d expry, then redirect to redirectURL
+
+    const res = new NextResponse();
+
+    res.cookies.set('bdb_token', '');
+    return NextResponse.redirect(new URL(redirectURL));
   } catch (error) {
     console.error('SAML processing error:', error);
-    return api.ErrorRes(500, 'Failed to process SAML response');
+    return handleSAMLError(500, 'Failed to process SAML response', redirectURL);
   }
 }
 
 //*=== Helpers
 
-// TODO: handle error and success redirects
+// map of known redirect URLs
+const RedirectURLMap = {
+  bvector: 'https://bvector.bangdb.com',
+  ampere: 'https://appamp.bangdb.com'
+};
 
-// const handleErrors = (msg = '', code = 500) => {
-//   return NextResponse.redirect(
-//     new URL(`/login?saml_error=${encodeURIComponent(msg)}&code=${code}`, process.env.NEXT_PUBLIC_APP_URL)
-//   );
-// };
+// redirect to error page with code and message
+const handleSAMLError = (code = 500, msg = '', redirectURL = '') => {
+  return NextResponse.redirect(
+    new URL(
+      `/auth/error?msg=${encodeURIComponent(msg)}&code=${code}&redirectURL=${encodeURIComponent(
+        redirectURL
+      )}`,
+      process.env.NEXT_PUBLIC_APP_URL
+    )
+  );
+};
 
 /**
  * Check if the user already exists or create a new user if they do not

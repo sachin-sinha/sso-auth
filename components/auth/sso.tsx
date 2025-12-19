@@ -30,7 +30,12 @@ export default function SSOLoginForm({ className, ...props }: React.ComponentPro
     setIsSubmitting(true);
 
     try {
-      const res = await fetch(`/api/auth/saml/lookup?email=${email}`);
+      // get redirect URL from query params
+      const redirectURL =
+        typeof window !== 'undefined'
+          ? new URLSearchParams(window.location.search).get('redirectURL') || ''
+          : '';
+      const res = await fetch(`/api/auth/saml/lookup?email=${email}&redirectURL=${redirectURL}`);
       const resData = (await res.json()) as APIResponse;
 
       if (!res.ok || res.status !== 200 || !resData.success) {

@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation';
 import { SAMLConfig } from '@/types/organization';
 import { api } from '@/lib/utils/api';
 import { NextRequest } from 'next/server';
@@ -10,6 +11,7 @@ export async function GET(request: NextRequest) {
     // Parse request body
     const queries = request.nextUrl.searchParams;
     const email = queries.get('email') || '';
+    const redirectURL = queries.get('redirectURL') || '';
 
     if (!email) return api.ErrorRes(400, 'Email required');
 
@@ -48,7 +50,8 @@ export async function GET(request: NextRequest) {
       } else {
         const ssoLoginURL = generateLoginURL(
           parsedAccountInfo?.organization?.samlConfig as SAMLConfig,
-          parsedAccountInfo?.organization?.id
+          parsedAccountInfo?.organization?.id,
+          redirectURL
         );
 
         return api.SuccessRes('SSO login url', { ssoURL: ssoLoginURL });

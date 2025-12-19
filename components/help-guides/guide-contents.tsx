@@ -72,7 +72,7 @@ export default function GuideContentsNav({ provider, setProvider }: Props) {
             <div className='w-4.5 top-2.5 left-2.5 absolute'>{provider === 'okta' ? OktaIcon : MSIcon}</div>
             <NativeSelect
               id='idp'
-              className={'pl-[34px]'}
+              className={'pl-8.5'}
               value={provider}
               onChange={ev => setProvider(ev.currentTarget.value as SupportedProviders)}
             >

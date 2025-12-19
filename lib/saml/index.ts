@@ -17,8 +17,10 @@ export function setupSAMLValidator() {
   });
 }
 
-export function generateLoginURL(config: SAMLConfig, orgId: string) {
-  const orgIdEncoded = encodeURIComponent(Buffer.from(JSON.stringify({ orgId })).toString('base64'));
+export function generateLoginURL(config: SAMLConfig, orgId: string, redirectURL = '') {
+  const orgIdEncoded = encodeURIComponent(
+    Buffer.from(JSON.stringify({ orgId, redirectURL })).toString('base64')
+  );
 
   // okta
   if (config.idP === IdentityProvider.Okta) {
