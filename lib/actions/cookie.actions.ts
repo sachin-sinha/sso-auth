@@ -19,6 +19,7 @@ export const setCookie = async ({
     name,
     value,
     domain,
+    sameSite: 'none',
     httpOnly: true,
     secure: true,
     maxAge
