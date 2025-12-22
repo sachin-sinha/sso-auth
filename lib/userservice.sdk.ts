@@ -20,13 +20,10 @@ export const setUserService = async ({
   baseURL: string;
   returnValues?: boolean;
 }) => {
-  const baseURLWithProtocol = `https://${baseURL}`;
-
-  UserServiceAPI.defaults.baseURL = baseURLWithProtocol;
+  UserServiceAPI.defaults.baseURL = `https://${baseURL}`;
   UserServiceBaseURL = baseURL;
 
-  await setCookie('bdb_us', JSON.stringify({ baseURL }));
-
+  await setCookie({ name: 'bdb_us', value: JSON.stringify({ baseURL }) });
   if (returnValues) return { baseURL };
 };
 

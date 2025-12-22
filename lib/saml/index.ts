@@ -18,6 +18,7 @@ export function setupSAMLValidator() {
 }
 
 export function generateLoginURL(config: SAMLConfig, orgId: string, redirectURL = '') {
+  // Todo: handle uaip here
   const orgIdEncoded = encodeURIComponent(
     Buffer.from(JSON.stringify({ orgId, redirectURL })).toString('base64')
   );

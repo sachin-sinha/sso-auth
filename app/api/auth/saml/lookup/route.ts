@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
     const queries = request.nextUrl.searchParams;
     const email = queries.get('email') || '';
     const redirectURL = queries.get('redirectURL') || '';
+    // Todo: uaip values should be passed here as a query param
 
     if (!email) return api.ErrorRes(400, 'Email required');
 
@@ -51,7 +52,8 @@ export async function GET(request: NextRequest) {
         const ssoLoginURL = generateLoginURL(
           parsedAccountInfo?.organization?.samlConfig as SAMLConfig,
           parsedAccountInfo?.organization?.id,
-          redirectURL
+          redirectURL,
+          // Todo: uaip to be passed here
         );
 
         return api.SuccessRes('SSO login url', { ssoURL: ssoLoginURL });

@@ -11,7 +11,7 @@ import { initIdentityProvider, initServiceProvider, setupSAMLValidator } from '@
 import { logger } from '@/lib/utils/logger';
 import { OrgActions } from '@/lib/actions/org.actions';
 import { getUserByEmail } from '@/lib/actions/user.actions';
-import { createApiKey, createUser } from '@/lib/actions/auth.actions';
+import { createApiKey, createUser, getUserInfo } from '@/lib/actions/auth.actions';
 import { authTokenPayload } from '@/lib/actions/verifications.actions';
 import { setCookie } from '@/lib/actions/cookie.actions';
 
@@ -22,8 +22,8 @@ import { setCookie } from '@/lib/actions/cookie.actions';
  * Here, we verify SAML response assertion > authenticate user > redirect to the app
  */
 export async function POST(request: NextRequest) {
-  // TODO: redirect uri
   let redirectURL = RedirectURLMap.bvector;
+
   try {
     // 1. read the form data from the POST request
     const formData = await request.formData();
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
         const decoded = JSON.parse(Buffer.from(relayState, 'base64').toString());
         orgId = decoded.orgId;
         redirectURL = decoded.redirectURL;
-
+        // Todo: get uaip from relay state
         if (!orgId) throw new Error('orgId is missing in relayState');
 
         [accountInfo, orgError] = await orgAPI.getOrgById({
@@ -77,7 +77,9 @@ export async function POST(request: NextRequest) {
 
         // navigate through SAML2 response structure to find NameID
         const nameID =
-          parsed['saml2p:Response']?.['saml2:Assertion']?.['saml2:Subject']?.['saml2:NameID']?.['#text'];
+          parsed['saml2p:Response']?.['saml2:Assertion']?.['saml2:Subject']?.['saml2:NameID']?.[
+            '#text'
+          ];
 
         if (!nameID || !nameID.includes('@')) {
           return handleSAMLError(
@@ -95,7 +97,11 @@ export async function POST(request: NextRequest) {
         if (accountInfo?.organization) org = accountInfo.organization;
 
         if (!org?.id) {
-          return handleSAMLError(400, `No organization found for domain: ${emailDomain}`, redirectURL);
+          return handleSAMLError(
+            400,
+            `No organization found for domain: ${emailDomain}`,
+            redirectURL
+          );
         }
 
         orgId = org.id;
@@ -115,7 +121,8 @@ export async function POST(request: NextRequest) {
       return handleSAMLError(400, 'SAML SSO not configured for this organization', redirectURL);
     }
 
-    if (!org.ssoEnabled) return handleSAMLError(400, 'SSO not enabled for this organization', redirectURL);
+    if (!org.ssoEnabled)
+      return handleSAMLError(400, 'SSO not enabled for this organization', redirectURL);
 
     console.debug('🚀 ~ POST ~ samlConfig:', org.samlConfig);
 
@@ -151,18 +158,25 @@ export async function POST(request: NextRequest) {
 
     if (provisionError) throw new Error(provisionError);
 
-    // 9. Trigger authentication flow for the user
+    // 9. Create session for the user
+    const { session_id } = await getUserInfo(
+      authTokenPayload({
+        userid: userEmail,
+        create_session: 1,
+        uaip:
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36' +
+          '127.0.0.1'
+      })
+    );
 
-    const cookieTTL = 60 * 60 * 24 * 7; // 7 days in seconds
-    await setCookie('bdb_userid', userEmail, cookieTTL);
-    await setCookie('bdb_apikey', userApikey, cookieTTL);
+    if (!session_id) throw new Error('Failed to create the session for the user');
 
-    // 10. Redirect the user to the app
-    // TODO: set secure cookie to bangdb.com, for 1d expry, then redirect to redirectURL
+    // 10. Set the cookies for the user
+    const cookieTTL = 60 * 60 * 24; // 1 day in seconds
 
-    const res = new NextResponse();
+    await setCookie({ name: 'bdb_userid', value: userEmail, maxAge: cookieTTL });
+    await setCookie({ name: 'bdb_session_token', value: session_id, maxAge: cookieTTL });
 
-    res.cookies.set('bdb_token', '');
     return NextResponse.redirect(new URL(redirectURL));
   } catch (error) {
     console.error('SAML processing error:', error);

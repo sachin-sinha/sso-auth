@@ -2,12 +2,23 @@
 
 import { cookies } from 'next/headers';
 
-export const setCookie = async (name: string, value: string, maxAge: number | undefined = undefined) => {
+export const setCookie = async ({
+  name,
+  value,
+  maxAge,
+  domain = '.bangdb.com'
+}: {
+  name: string;
+  value: string;
+  maxAge?: number | undefined;
+  domain?: string;
+}) => {
   const cookieStore = await cookies();
 
   cookieStore.set({
     name,
     value,
+    domain,
     httpOnly: true,
     secure: true,
     maxAge
@@ -16,9 +27,7 @@ export const setCookie = async (name: string, value: string, maxAge: number | un
 
 export const getCookie = async (name: string) => {
   const cookieStore = await cookies();
-  const value = cookieStore.get(name);
-
-  return value;
+  return cookieStore.get(name);
 };
 
 export const getAllCookies = async () => {
@@ -28,14 +37,12 @@ export const getAllCookies = async () => {
 
 export const cookieExists = async (name: string) => {
   const cookieStore = await cookies();
-  const hasCookie = cookieStore.has(name);
-
-  return hasCookie;
+  return cookieStore.has(name);
 };
 
 export const deleteCookie = async (name: string, option: 0 | 1 = 0) => {
   if (option === 0) {
-    await setCookie(name, '');
+    await setCookie({ name, value: '' });
   } else if (option === 1) {
     (await cookies()).delete(name);
   }
