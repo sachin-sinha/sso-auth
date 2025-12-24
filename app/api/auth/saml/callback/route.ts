@@ -11,7 +11,6 @@ import { OrgActions } from '@/lib/actions/org.actions';
 import { getUserByEmail } from '@/lib/actions/user.actions';
 import { createApiKey, createUser, getUserInfo } from '@/lib/actions/auth.actions';
 import { authTokenPayload } from '@/lib/actions/verifications.actions';
-import { setCookie } from '@/lib/actions/cookie.actions';
 
 /**
  ** POST /api/auth/saml/callback
@@ -169,14 +168,31 @@ export async function POST(request: NextRequest) {
 
     if (!session_id) throw new Error('Failed to create the session for the user');
 
-    // 10. Set the cookies for the user
+    // 10. Set the cookies and redirect the user
+    const response = NextResponse.redirect(new URL('/', redirectURL), { status: 303 });
     const cookieTTL = 60 * 60 * 24; // 1 day in seconds
 
-    await setCookie({ name: 'bdb_userid', value: userEmail, maxAge: cookieTTL });
-    await setCookie({ name: 'bdb_session_token', value: session_id, maxAge: cookieTTL });
+    response.cookies.set({
+      name: 'bdb_userid',
+      value: userEmail,
+      maxAge: cookieTTL,
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      domain: '.bangdb.com'
+    });
 
-    console.log({ redirectURL });
-    return NextResponse.redirect(new URL(redirectURL));
+    response.cookies.set({
+      name: 'bdb_session_token',
+      value: session_id,
+      maxAge: cookieTTL,
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      domain: '.bangdb.com'
+    });
+
+    return response;
   } catch (error) {
     console.error('SAML processing error:', error);
     return handleSAMLError(500, 'Failed to process SAML response', redirectURL);
