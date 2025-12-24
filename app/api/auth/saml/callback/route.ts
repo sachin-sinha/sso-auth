@@ -5,7 +5,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { User, UserRole, UserStatus } from '@/types/user';
 import type { SAMLAttributeKeyMapping, Organization, AccountInfo } from '@/types/organization';
 
-import { api } from '@/lib/utils/api';
 import { generatePassword } from '@/lib/utils';
 import { initIdentityProvider, initServiceProvider, setupSAMLValidator } from '@/lib/saml';
 import { logger } from '@/lib/utils/logger';
@@ -104,7 +103,7 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        orgId = org.id;
+        orgId = org?.id;
       } catch (e) {
         return handleSAMLError(
           500,
@@ -117,20 +116,20 @@ export async function POST(request: NextRequest) {
     if (orgError || !org?.id)
       return handleSAMLError(500, orgError || 'Failed to fetch organization', redirectURL);
 
-    if (!org?.samlConfig || !org.samlConfig?.metadata?.attributes) {
+    if (!org?.samlConfig || !org?.samlConfig?.metadata?.attributes) {
       return handleSAMLError(400, 'SAML SSO not configured for this organization', redirectURL);
     }
 
-    if (!org.ssoEnabled)
+    if (!org?.ssoEnabled)
       return handleSAMLError(400, 'SSO not enabled for this organization', redirectURL);
 
-    console.debug('🚀 ~ POST ~ samlConfig:', org.samlConfig);
+    console.debug('🚀 ~ POST ~ samlConfig:', org?.samlConfig);
 
     setupSAMLValidator();
 
     // 5. initialize SP (us) and IdP provider for assertion and verification
-    const sp = initServiceProvider(org.samlConfig.callbackURL);
-    const idp = initIdentityProvider(org.samlConfig);
+    const sp = initServiceProvider(org?.samlConfig.callbackURL);
+    const idp = initIdentityProvider(org?.samlConfig);
 
     // 6. parse and validate SAML response
     const { extract } = await sp.parseLoginResponse(idp, 'post', {
@@ -138,7 +137,7 @@ export async function POST(request: NextRequest) {
     });
 
     // 7. extract user details from SAML response attributes
-    const attrKeyMapping = org.samlConfig.metadata.attributes;
+    const attrKeyMapping = org?.samlConfig.metadata.attributes;
 
     console.debug('🚀 ~ POST ~ /callback ~ attrKeyMapping:', attrKeyMapping);
     console.debug("🚀 ~ POST ~ /callback ~ extract?.['attributes']:", extract?.['attributes']);
@@ -158,7 +157,7 @@ export async function POST(request: NextRequest) {
 
     if (provisionError) throw new Error(provisionError);
 
-    // 9. Create session for the user
+    // 9. Create a new session for the user
     const { session_id } = await getUserInfo(
       authTokenPayload({
         userid: userEmail,
@@ -177,7 +176,7 @@ export async function POST(request: NextRequest) {
     await setCookie({ name: 'bdb_userid', value: userEmail, maxAge: cookieTTL });
     await setCookie({ name: 'bdb_session_token', value: session_id, maxAge: cookieTTL });
 
-    return NextResponse.redirect(new URL(redirectURL));
+    return redirect(redirectURL);
   } catch (error) {
     console.error('SAML processing error:', error);
     return handleSAMLError(500, 'Failed to process SAML response', redirectURL);
