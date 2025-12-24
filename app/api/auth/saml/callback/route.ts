@@ -1,4 +1,3 @@
-import { redirect } from 'next/navigation';
 import { XMLParser } from 'fast-xml-parser';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -176,7 +175,8 @@ export async function POST(request: NextRequest) {
     await setCookie({ name: 'bdb_userid', value: userEmail, maxAge: cookieTTL });
     await setCookie({ name: 'bdb_session_token', value: session_id, maxAge: cookieTTL });
 
-    return redirect(redirectURL);
+    console.log({ redirectURL });
+    return NextResponse.redirect(new URL(redirectURL));
   } catch (error) {
     console.error('SAML processing error:', error);
     return handleSAMLError(500, 'Failed to process SAML response', redirectURL);
@@ -191,7 +191,7 @@ const RedirectURLMap = {
   ampere: 'https://appamp.bangdb.com'
 };
 
-// redirect to error page with code and message
+// redirect to an error page with code and message
 const handleSAMLError = (code = 500, msg = '', redirectURL = '') => {
   return NextResponse.redirect(
     new URL(
